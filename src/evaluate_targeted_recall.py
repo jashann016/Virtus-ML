@@ -106,7 +106,7 @@ def run_targeted_recall_benchmark(num_s1: int = 1000, num_distractors: int = 500
         if not true_targets:
             continue
             
-        retrieved = set(blocker.retrieve_candidates(r, max_candidates=50))
+        retrieved = set(blocker.retrieve_candidates(r, max_candidates=65))
         total_evaluable_links += len(true_targets)
         captured_links += len(true_targets.intersection(retrieved))
         
@@ -116,7 +116,7 @@ def run_targeted_recall_benchmark(num_s1: int = 1000, num_distractors: int = 500
     print("\n" + "=" * 60)
     print("TARGETED CANDIDATE RECALL RESULTS:")
     print(f"• Total Ground Truth Links Tested: {total_evaluable_links:,}")
-    print(f"• True Links Captured in Top-50 Candidates: {captured_links:,}")
+    print(f"• True Links Captured in Top-65 Candidates: {captured_links:,}")
     print(f"• TRUE CANDIDATE RECALL CEILING: {recall:.2f}%")
     print(f"• Retrieval Speed: {len(s1_records) / elapsed:.1f} entities/second")
     print("=" * 60)

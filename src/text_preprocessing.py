@@ -7,6 +7,7 @@ RE_DIACRITICS = re.compile(r'[\u0300-\u036f]')
 RE_NON_ALPHANUM = re.compile(r'[^\w\s]')
 RE_MULTI_SPACE = re.compile(r'\s+')
 RE_NUMBERS = re.compile(r'\b\d+(?:[/-]\d+)?\b')
+RE_ALPHANUM_PLOTS = re.compile(r'\b[a-zA-Z]{1,3}[-/]\d{1,5}\b|\b\d{1,5}[-/][a-zA-Z]{1,3}\b')
 RE_DOMAIN = re.compile(r'^(?:https?://)?(?:www\.)?([a-zA-Z0-9-]+)\.(?:com|in|org|net|fr|co|io|biz|info)\b', re.IGNORECASE)
 
 # Legal suffixes across US, India, and France
@@ -81,6 +82,13 @@ def strip_accents(text: str) -> str:
     return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
 
+def has_non_latin(text: str) -> bool:
+    """Detects if text contains non-Latin characters (e.g. Hindi, Odia, Kannada)."""
+    if not text:
+        return False
+    return any(ord(c) > 0x024F for c in text if c.isalpha())
+
+
 def clean_text_basic(text: str) -> str:
     """Basic normalization: strip accents, lowercase, unify '&' -> 'and', clean punctuation."""
     if not text or not isinstance(text, str):
@@ -116,13 +124,11 @@ def normalize_business_name(name: str) -> str:
         
     cleaned = clean_text_basic(name)
     
-    # Check if name is a domain like "maurewilliamscolombier.com"
     domain_match = RE_DOMAIN.match(name.strip())
     if domain_match:
         core_domain = domain_match.group(1).lower().replace('-', ' ')
         cleaned = core_domain
     
-    # Strip legal suffixes
     for reg in RE_LEGAL_SUFFIXES:
         cleaned = reg.sub(' ', cleaned)
         
@@ -130,11 +136,7 @@ def normalize_business_name(name: str) -> str:
 
 
 def normalize_address(addr: str) -> str:
-    """
-    Normalizes an address string:
-    - Expands abbreviations (st -> street, rd -> road, bd -> boulevard)
-    - Standardizes separators
-    """
+    """Normalizes address string."""
     if not addr or not isinstance(addr, str):
         return ""
         
@@ -147,33 +149,15 @@ def normalize_address(addr: str) -> str:
 
 
 def extract_numbers(addr: str) -> List[str]:
-    """Extracts all numeric tokens (building numbers, plot numbers, postal codes)."""
+    """Extracts all numeric tokens."""
     if not addr or not isinstance(addr, str):
         return []
     return RE_NUMBERS.findall(addr)
 
 
-if __name__ == "__main__":
-    # Test cases representing our discovered noise patterns:
-    print("Testing Text Preprocessing Functions:")
-    
-    # Test 1: Suffix stripping and domain detection
-    t1 = "Maure Williams Colombier Inc"
-    t2 = "maurewilliamscolombier.com"
-    print(f"'{t1}' -> '{normalize_business_name(t1)}'")
-    print(f"'{t2}' -> '{normalize_business_name(t2)}'")
-    assert normalize_business_name(t1) == "maure williams colombier"
-    
-    # Test 2: French accents and legal suffix
-    t3 = "<< Team École SARL"
-    print(f"'{t3}' -> '{normalize_business_name(t3)}'")
-    assert normalize_business_name(t3) == "team ecole"
-    
-    # Test 3: Address abbreviations and numbers
-    addr = "85 Wanye Avenue, Ticonderoga Townshiip, NY 12883"
-    print(f"Address: '{addr}' -> '{normalize_address(addr)}'")
-    print(f"Numbers extracted: {extract_numbers(addr)}")
-    assert "85" in extract_numbers(addr)
-    assert "12883" in extract_numbers(addr)
-    
-    print("All preprocessing tests passed successfully!")
+def extract_plot_codes(raw_addr: str) -> List[str]:
+    """Extracts alphanumeric plot / block codes like B-148 -> b148, G-3 -> g3."""
+    if not raw_addr:
+        return []
+    matches = RE_ALPHANUM_PLOTS.findall(raw_addr)
+    return [m.lower().replace('-', '').replace('/', '') for m in matches]

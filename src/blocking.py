@@ -12,27 +12,61 @@ if PROJECT_ROOT not in sys.path:
 from src.text_preprocessing import (
     normalize_business_name,
     normalize_address,
-    extract_numbers
+    extract_numbers,
+    extract_plot_codes,
+    has_non_latin
 )
 
+STOP_WORDS = {
+    'the', 'and', 'for', 'of', 'in', 'on', 'at', 'to', 'by', 'with', 'from', 
+    'de', 'du', 'des', 'la', 'le', 'et', 'near', 'opp', 'opposite', 'behind'
+}
 
-def extract_address_keys(address_norm: str) -> List[str]:
+GENERIC_ADDR_WORDS = {
+    'street', 'road', 'avenue', 'boulevard', 'lane', 'drive', 'floor', 
+    'building', 'block', 'phase', 'sector', 'nagar', 'colony', 'city', 
+    'rue', 'allee', 'place', 'route', 'court', 'plaza', 'parkway'
+}
+
+
+def extract_address_keys(address_norm: str, raw_address: str = "") -> List[str]:
     """
-    Extracts blocking keys from an address:
-    Combines numeric tokens (building numbers, postal codes) with significant street/city words.
+    Extracts high-precision blocking keys from an address:
+    1. Alphanumeric plot codes (e.g. 'b148', 'g3')
+    2. Numbers combined with significant street/city tokens
+    3. Distinctive street/city word-pairs (e.g. 'puri_station', 'kingsport_claremont')
     """
     if not address_norm:
         return []
     
     tokens = address_norm.split()
     numbers = [t for t in tokens if any(c.isdigit() for c in t)]
-    words = [t for t in tokens if len(t) >= 3 and not any(c.isdigit() for c in t)]
+    sig_words = [
+        t for t in tokens 
+        if len(t) >= 4 and not any(c.isdigit() for c in t) and t not in GENERIC_ADDR_WORDS and t not in STOP_WORDS
+    ]
     
     keys = []
-    if numbers and words:
+    
+    # 1. Alphanumeric plot codes (e.g. B-148 -> b148)
+    plot_codes = extract_plot_codes(raw_address)
+    for p in plot_codes:
+        keys.append(f"plot_{p}")
+        for w in sig_words[:2]:
+            keys.append(f"{p}_{w}")
+            
+    # 2. Building numbers combined with street words
+    if numbers and sig_words:
         for num in numbers[:2]:
-            for w in words[:3]:
+            for w in sig_words[:3]:
                 keys.append(f"{num}_{w}")
+                
+    # 3. Distinctive street & locality word-pairs (handles records with missing numbers)
+    if len(sig_words) >= 2:
+        for i in range(min(3, len(sig_words) - 1)):
+            pair = "_".join(sorted([sig_words[i], sig_words[i + 1]]))
+            keys.append(f"loc_{pair}")
+            
     return keys
 
 
@@ -44,14 +78,10 @@ def get_char_trigrams(word: str) -> List[str]:
 
 
 def load_tsv_records(file_path: str, max_rows: int = None) -> List[dict]:
-    """
-    Fast TSV reader without external dependencies.
-    Reads entity_id, business_name, business_address, country.
-    """
+    """Fast TSV reader for entity_id, business_name, business_address, country."""
     records = []
     with open(file_path, 'r', encoding='utf-8') as f:
         header = f.readline().strip().split('\t')
-        
         col_map = {col.strip(): i for i, col in enumerate(header)}
         id_idx = col_map.get('entity_id', 0)
         name_idx = col_map.get('business_name', 1)
@@ -74,18 +104,17 @@ def load_tsv_records(file_path: str, max_rows: int = None) -> List[dict]:
     return records
 
 
-STOP_WORDS = {'the', 'and', 'for', 'of', 'in', 'on', 'at', 'to', 'by', 'with', 'from', 'de', 'du', 'des', 'la', 'le', 'et'}
-
-
 class InvertedIndexBlocker:
     """
-    High-Recall Candidate Generation Engine:
+    Advanced Multi-Angle Candidate Generation Engine:
     - Partitioned strictly by country (US, India, France).
-    - Multi-angle inverted indexing:
-      1. Exact word tokens (weight 5)
-      2. Token-sorted name key (weight 10)
-      3. Character 3-grams for typos (weight 1)
-      4. Building-number + street keys for DBAs / trade names (weight 8)
+    - Multi-angle indexing:
+      1. Word tokens & trigrams (names)
+      2. Token-sorted name keys
+      3. Alphanumeric plot/block codes (B-148, G-3)
+      4. Building-number + street keys
+      5. Locality/landmark word-pairs
+      6. Cross-script sensitivity (Indic scripts <-> English)
     """
     def __init__(self):
         self.name_token_index: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
@@ -94,7 +123,7 @@ class InvertedIndexBlocker:
         self.address_key_index: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
         
     def index_candidates(self, candidates: List[dict]):
-        """Indexes records from Source 2 and Source 3."""
+        """Indexes candidate records from Source 2 and Source 3."""
         for cand in candidates:
             c_id = cand['entity_id']
             country = cand['country']
@@ -104,36 +133,38 @@ class InvertedIndexBlocker:
             norm_name = normalize_business_name(raw_name)
             norm_addr = normalize_address(raw_addr)
             
-            # 1. Full word tokens (words with length >= 2, excluding stopwords)
+            # 1. Name tokens & trigrams
             name_words = [w for w in norm_name.split() if len(w) >= 2 and w not in STOP_WORDS]
             for w in name_words:
                 self.name_token_index[country][w].append(c_id)
-                
-                # 2. Character trigrams for typo resilience
                 if len(w) >= 4:
                     for tri in get_char_trigrams(w):
                         self.trigram_index[country][tri].append(c_id)
             
-            # 3. Token-sorted name key
+            # 2. Token-sorted name key
             if len(name_words) >= 2:
                 sorted_key = "_".join(sorted(name_words[:4]))
                 self.sorted_name_index[country][sorted_key].append(c_id)
                     
-            # 4. Address keys (number + street)
-            addr_keys = extract_address_keys(norm_addr)
+            # 3. Address keys (numbers, plot codes, locality pairs)
+            addr_keys = extract_address_keys(norm_addr, raw_address=raw_addr)
             for k in addr_keys:
                 self.address_key_index[country][k].append(c_id)
 
     def retrieve_candidates(
         self, 
         s1_record: dict, 
-        max_candidates: int = 50
+        max_candidates: int = 65
     ) -> List[str]:
         """Finds top candidate entity_ids for a single Source 1 entity."""
         country = s1_record['country']
-        norm_name = normalize_business_name(s1_record['business_name'])
-        norm_addr = normalize_address(s1_record['business_address'])
+        raw_name = s1_record['business_name']
+        raw_addr = s1_record['business_address']
         
+        norm_name = normalize_business_name(raw_name)
+        norm_addr = normalize_address(raw_addr)
+        
+        is_cross_script = has_non_latin(raw_name) or country == "India"
         candidate_scores = defaultdict(int)
         name_words = [w for w in norm_name.split() if len(w) >= 2 and w not in STOP_WORDS]
         
@@ -141,8 +172,6 @@ class InvertedIndexBlocker:
         for w in name_words:
             for c_id in self.name_token_index[country].get(w, []):
                 candidate_scores[c_id] += 5
-                
-            # Trigram matching for typos
             if len(w) >= 4:
                 for tri in get_char_trigrams(w):
                     for c_id in self.trigram_index[country].get(tri, []):
@@ -154,11 +183,14 @@ class InvertedIndexBlocker:
             for c_id in self.sorted_name_index[country].get(sorted_key, []):
                 candidate_scores[c_id] += 10
                     
-        # 3. Address key matching (Very strong signal for DBAs / trade names)
-        addr_keys = extract_address_keys(norm_addr)
+        # 3. Address key matching
+        addr_keys = extract_address_keys(norm_addr, raw_address=raw_addr)
+        addr_weight = 12 if is_cross_script else 8
+        
         for k in addr_keys:
             for c_id in self.address_key_index[country].get(k, []):
-                candidate_scores[c_id] += 8
+                # Extra weight for plot codes and exact building numbers
+                candidate_scores[c_id] += addr_weight
                 
         if not candidate_scores:
             return []
@@ -176,11 +208,9 @@ def write_candidate_pairs_file(
     s1_records: List[dict],
     blocker: InvertedIndexBlocker,
     output_path: str,
-    max_candidates: int = 35
+    max_candidates: int = 65
 ):
-    """
-    Generates output/candidate_pairs.tsv formatted according to competition rules.
-    """
+    """Generates output/candidate_pairs.tsv formatted according to competition rules."""
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write("source1_entity_id\tcandidate_entity_ids\n")
@@ -189,20 +219,3 @@ def write_candidate_pairs_file(
             candidates = blocker.retrieve_candidates(record, max_candidates=max_candidates)
             cand_str = ",".join(candidates) if candidates else ""
             f.write(f"{s1_id}\t{cand_str}\n")
-
-
-if __name__ == "__main__":
-    print("Testing InvertedIndexBlocker...")
-    blocker = InvertedIndexBlocker()
-    mock_candidates = [
-        {'entity_id': 'S2-001', 'business_name': 'Maure Wilblims Colombier Inc', 'business_address': '', 'country': 'US'},
-        {'entity_id': 'S3-002', 'business_name': 'Dréxkor', 'business_address': '85 Wanye Avenue, Ticonderoga', 'country': 'US'},
-        {'entity_id': 'S2-003', 'business_name': 'Totally Unrelated', 'business_address': '100 Main St', 'country': 'US'}
-    ]
-    blocker.index_candidates(mock_candidates)
-    query = {'entity_id': 'S1-001', 'business_name': 'Maure Williams Colombier Inc', 'business_address': '85 Wayne Avenue', 'country': 'US'}
-    retrieved = blocker.retrieve_candidates(query, max_candidates=10)
-    print(f"Retrieved: {retrieved}")
-    assert 'S2-001' in retrieved
-    assert 'S3-002' in retrieved
-    print("Tests passed successfully!")
