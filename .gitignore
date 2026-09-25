@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data & Large outputs
+dataset/
+output/*.tsv
+!output/.gitkeep
+models/*.pkl
+models/*.safetensors
+aws/checkpoints/
+
+# Virtual Environments
+venv/
+env/
+.venv/
+
+# IDE & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
