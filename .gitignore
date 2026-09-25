@@ -1,16 +1,27 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 
 # Data & Large outputs
 dataset/
 output/*.tsv
+output/*.csv
+output/*.parquet
 !output/.gitkeep
 models/*.pkl
 !models/lightgbm_matcher.pkl
 models/*.safetensors
 aws/checkpoints/
+
+# Local datasets
+train_ground_truth.tsv
+train_source1.tsv
+train_source2.tsv
+train_source3.tsv
+test_source1.tsv
+test_source2.tsv
+test_source3.tsv
 
 # Virtual Environments
 venv/
