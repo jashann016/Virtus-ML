@@ -8,6 +8,7 @@ dataset/
 output/*.tsv
 !output/.gitkeep
 models/*.pkl
+!models/lightgbm_matcher.pkl
 models/*.safetensors
 aws/checkpoints/
 
