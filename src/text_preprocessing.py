@@ -165,3 +165,31 @@ def extract_plot_codes(raw_addr: str) -> List[str]:
     cleaned = normalize_units_and_numbers(raw_addr.lower())
     matches = re.findall(r'\b[a-z]{1,3}\d{1,5}\b|\b\d{1,5}[a-z]{1,3}\b', cleaned)
     return list(set(matches))
+
+
+def soundex(token: str) -> str:
+    """Standard American Soundex algorithm for phonetic transliteration matching."""
+    if not token or not isinstance(token, str):
+        return ""
+    # Strip non-alpha characters
+    clean = "".join([c for c in token if c.isalpha()]).upper()
+    if not clean:
+        return ""
+    mapping = {
+        'B': '1', 'F': '1', 'P': '1', 'V': '1',
+        'C': '2', 'G': '2', 'J': '2', 'K': '2', 'Q': '2', 'S': '2', 'X': '2', 'Z': '2',
+        'D': '3', 'T': '3',
+        'L': '4',
+        'M': '5', 'N': '5',
+        'R': '6'
+    }
+    first_letter = clean[0]
+    tail = clean[1:]
+    coded = [mapping.get(c, '') for c in tail]
+    res = [first_letter]
+    prev = mapping.get(first_letter, '')
+    for d in coded:
+        if d != '' and d != prev:
+            res.append(d)
+        prev = d
+    return ("".join(res) + "000")[:4]

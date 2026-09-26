@@ -1,8 +1,8 @@
 {
-  "best_threshold": 0.7800000000000001,
+  "best_threshold": 0.7600000000000001,
   "best_margin": 0.18,
-  "validation_macro_f05": 0.9781576538521308,
-  "validation_auc": 0.9996850999933079,
+  "validation_macro_f05": 0.9756989924498498,
+  "validation_auc": 0.9996684810582629,
   "feature_names": [
     "name_token_sort_ratio",
     "name_token_set_ratio",
@@ -27,7 +27,7 @@
     "has_matching_street_token"
   ],
   "n_features": 21,
-  "train_samples": 985154,
-  "val_samples": 246317,
-  "timestamp": "2026-09-26 12:05:51"
+  "train_samples": 1084078,
+  "val_samples": 271017,
+  "timestamp": "2026-09-26 12:28:27"
 }

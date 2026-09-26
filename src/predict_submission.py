@@ -29,7 +29,7 @@ def generate_submission(
     meta_path: str = "models/lightgbm_metadata.json",
     output_path: str = "output/submission.csv",
     test_limit: int = None,
-    max_cands_per_entity: int = 35
+    max_cands_per_entity: int = 45
 ):
     print("=" * 70)
     print("VIRTUS-ML: GENERATING PREDICTIONS FOR SUBMISSION")

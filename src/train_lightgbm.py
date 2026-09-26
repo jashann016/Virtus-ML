@@ -29,9 +29,9 @@ from src.metrics import compute_macro_f05, compute_entity_f_beta
 
 
 def load_training_dataset(
-    s1_limit: int = 25000,
-    cand_limit: int = 200000,
-    max_cands_per_entity: int = 35
+    s1_limit: int = 30000,
+    cand_limit: int = 250000,
+    max_cands_per_entity: int = 45
 ):
     """Loads a slice of training entities and ground truth, blocks candidates, and creates labeled pairs."""
     data_dir = os.path.join(PROJECT_ROOT, "dataset", "train")

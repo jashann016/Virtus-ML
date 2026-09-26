@@ -15,7 +15,8 @@ from src.text_preprocessing import (
     normalize_address,
     extract_numbers,
     extract_plot_codes,
-    has_non_latin
+    has_non_latin,
+    soundex
 )
 
 STOP_WORDS = {
@@ -163,6 +164,7 @@ class InvertedIndexBlocker:
         self.name_token_index: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
         self.sorted_name_index: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
         self.trigram_index: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
+        self.soundex_index: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
         self.address_key_index: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
         
     def index_candidates(self, candidates: List[dict]):
@@ -186,6 +188,9 @@ class InvertedIndexBlocker:
                 first_w = name_words[0]
                 if first_w not in COMMON_CITY_TOKENS and len(first_w) >= 3:
                     self.first_word_index[country][first_w].append(c_id)
+                    sdx = soundex(first_w)
+                    if sdx:
+                        self.soundex_index[country][sdx].append(c_id)
                     
             for w in name_words:
                 self.name_token_index[country][w].append(c_id)
@@ -241,6 +246,10 @@ class InvertedIndexBlocker:
             if first_w not in COMMON_CITY_TOKENS and len(first_w) >= 3:
                 for c_id in self.first_word_index[country].get(first_w, []):
                     candidate_scores[c_id] += 15
+                sdx = soundex(first_w)
+                if sdx:
+                    for c_id in self.soundex_index[country].get(sdx, []):
+                        candidate_scores[c_id] += 8
                     
         for w in name_words:
             # Common city names in business names carry lower weight
