@@ -26,11 +26,15 @@ FEATURE_NAMES = [
     "name_exact_clean",
     "name_first_word_match",
     "name_len_diff_ratio",
+    "name_containment_ratio",
     "addr_token_set_ratio",
     "addr_token_sort_ratio",
     "addr_jaccard",
     "number_match",
+    "number_conflict",
+    "exact_first_word_and_number",
     "plot_code_match",
+    "plot_code_conflict",
     "domain_match",
     "country_match",
     "non_latin_flag",
@@ -121,36 +125,54 @@ def extract_pairwise_features(
     addr_words_b = set(norm_addr_b.split())
     addr_jaccard = compute_jaccard(addr_words_a, addr_words_b)
 
-    # 11: Number Match
+    # 7. Name containment ratio
+    words_set_a = set(words_a)
+    words_set_b = set(words_b)
+    if words_set_a and words_set_b:
+        min_words = min(len(words_set_a), len(words_set_b))
+        name_containment = len(words_set_a.intersection(words_set_b)) / max(min_words, 1)
+    else:
+        name_containment = 0.0
+
+    # 11: Number Match & Conflict
     nums_a = set(extract_numbers(raw_addr_a))
     nums_b = set(extract_numbers(raw_addr_b))
     if nums_a and nums_b:
-        number_match = 1.0 if nums_a.intersection(nums_b) else 0.0
+        has_overlap = bool(nums_a.intersection(nums_b))
+        number_match = 1.0 if has_overlap else 0.0
+        number_conflict = 0.0 if has_overlap else 1.0
     else:
         number_match = 0.5  # Neutral when address lacks street numbers
+        number_conflict = 0.0
 
-    # 12: Indian Plot Code Match
+    # 12: Exact First Word AND Number Match (Extremely strong positive signal)
+    exact_first_word_and_num = 1.0 if (first_word_match == 1.0 and number_match == 1.0) else 0.0
+
+    # 13: Indian Plot Code Match & Conflict
     plots_a = set(extract_plot_codes(raw_addr_a))
     plots_b = set(extract_plot_codes(raw_addr_b))
     if plots_a and plots_b:
-        plot_code_match = 1.0 if plots_a.intersection(plots_b) else 0.0
+        plot_overlap = bool(plots_a.intersection(plots_b))
+        plot_code_match = 1.0 if plot_overlap else 0.0
+        plot_code_conflict = 0.0 if plot_overlap else 1.0
     else:
         plot_code_match = 0.5
+        plot_code_conflict = 0.0
 
-    # 13: Domain Link Match
+    # 14: Domain Link Match
     domain_match = is_domain_link(raw_name_a, raw_name_b, norm_name_a, norm_name_b)
 
-    # 14: Country Match
+    # 15: Country Match
     country_match = 1.0 if (country_a and country_a == country_b) else 0.0
 
-    # 15: Cross-Script / Non-Latin Flag
+    # 16: Cross-Script / Non-Latin Flag
     is_non_latin = 1.0 if (has_non_latin(raw_name_a) or has_non_latin(raw_name_b) or 
                            has_non_latin(raw_addr_a) or has_non_latin(raw_addr_b)) else 0.0
 
-    # 16: Reciprocal Rank from Blocker
+    # 17: Reciprocal Rank from Blocker
     reciprocal_rank = 1.0 / max(rank, 1)
 
-    # 17: Street Token Overlap (excluding generic terms like 'street', 'road', etc.)
+    # 18: Street Token Overlap (excluding generic terms like 'street', 'road', etc.)
     stopwords = {'street', 'road', 'avenue', 'boulevard', 'lane', 'drive', 'court', 'highway', 'parkway', 'rue', 'suite', 'unit', 'floor', 'apt', 'building'}
     meaningful_a = {w for w in addr_words_a if len(w) > 3 and w not in stopwords}
     meaningful_b = {w for w in addr_words_b if len(w) > 3 and w not in stopwords}
@@ -164,11 +186,15 @@ def extract_pairwise_features(
         "name_exact_clean": exact_clean,
         "name_first_word_match": first_word_match,
         "name_len_diff_ratio": len_diff,
+        "name_containment_ratio": name_containment,
         "addr_token_set_ratio": addr_token_set,
         "addr_token_sort_ratio": addr_token_sort,
         "addr_jaccard": addr_jaccard,
         "number_match": number_match,
+        "number_conflict": number_conflict,
+        "exact_first_word_and_number": exact_first_word_and_num,
         "plot_code_match": plot_code_match,
+        "plot_code_conflict": plot_code_conflict,
         "domain_match": domain_match,
         "country_match": country_match,
         "non_latin_flag": is_non_latin,

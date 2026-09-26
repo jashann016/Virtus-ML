@@ -273,48 +273,46 @@ def train_and_optimize_lightgbm(
             entity_cand_probs[s1_id] = []
         entity_cand_probs[s1_id].append((cid, prob))
 
-    best_threshold = 0.50
+    best_threshold = 0.70
+    best_margin = 0.15
     best_f05 = 0.0
-    best_precision = 0.0
-    best_recall = 0.0
 
-    print(f"{'Threshold':>10} | {'Macro-F0.5':>10} | {'Singletons Score':>16} | {'Matched Score':>14}")
-    print("-" * 58)
+    print(f"{'Threshold':>10} | {'Margin':>8} | {'Macro-F0.5':>10} | {'Singletons':>12} | {'Matched':>10}")
+    print("-" * 62)
 
-    for thresh in np.arange(0.35, 0.86, 0.03):
-        pred_dict = {}
-        for s1_id in val_entities:
-            cands = entity_cand_probs.get(s1_id, [])
-            # Filter candidates above threshold
-            matches = [cid for cid, p in cands if p >= thresh]
-            pred_dict[s1_id] = matches
+    for thresh in np.arange(0.68, 0.86, 0.02):
+        for margin in [0.10, 0.14, 0.18, 0.25, 1.0]:  # 1.0 means no relative margin
+            pred_dict = {}
+            for s1_id in val_entities:
+                cands = entity_cand_probs.get(s1_id, [])
+                if not cands:
+                    pred_dict[s1_id] = []
+                    continue
+                sorted_cands = sorted(cands, key=lambda x: x[1], reverse=True)
+                top_prob = sorted_cands[0][1]
+                matches = [cid for cid, p in sorted_cands if p >= thresh and (top_prob - p) <= margin]
+                pred_dict[s1_id] = matches
 
-        score = compute_macro_f05(val_gt_dict, pred_dict)
+            score = compute_macro_f05(val_gt_dict, pred_dict)
 
-        # Separate scores for singletons vs true matched entities
-        sing_scores = []
-        matched_scores = []
-        for s1_id in val_entities:
-            true_s = val_gt_dict[s1_id]
-            pred_s = set(pred_dict.get(s1_id, []))
-            s = compute_entity_f_beta(true_s, pred_s, beta=0.5)
-            if len(true_s) == 0:
-                sing_scores.append(s)
-            else:
-                matched_scores.append(s)
+            if score > best_f05:
+                best_f05 = score
+                best_threshold = thresh
+                best_margin = margin
+                
+                # Compute singletons and matched breakdown for the new best
+                sing_scores = [compute_entity_f_beta(val_gt_dict[s1_id], set(pred_dict[s1_id]), beta=0.5) 
+                               for s1_id in val_entities if len(val_gt_dict[s1_id]) == 0]
+                matched_scores = [compute_entity_f_beta(val_gt_dict[s1_id], set(pred_dict[s1_id]), beta=0.5) 
+                                  for s1_id in val_entities if len(val_gt_dict[s1_id]) > 0]
+                mean_sing = np.mean(sing_scores) if sing_scores else 1.0
+                mean_match = np.mean(matched_scores) if matched_scores else 0.0
 
-        mean_sing = np.mean(sing_scores) if sing_scores else 1.0
-        mean_match = np.mean(matched_scores) if matched_scores else 0.0
-
-        marker = " ◄ BEST" if score > best_f05 else ""
-        print(f"{thresh:>10.2f} | {score:>10.4f} | {mean_sing:>16.4f} | {mean_match:>14.4f}{marker}")
-
-        if score > best_f05:
-            best_f05 = score
-            best_threshold = thresh
+                print(f"{thresh:>10.2f} | {margin:>8.2f} | {score:>10.4f} | {mean_sing:>12.4f} | {mean_match:>10.4f} ◄ NEW PEAK")
 
     print("=" * 70)
-    print(f"OPTIMAL DECISION THRESHOLD: {best_threshold:.2f} (Macro-F0.5 = {best_f05:.4f})")
+    print(f"OPTIMAL DECISION PARAMETERS: Threshold = {best_threshold:.2f}, Relative Margin = {best_margin:.2f}")
+    print(f"FINAL PEAK MACRO-F0.5 SCORE = {best_f05:.4f}")
     print("=" * 70)
 
     # 6. Save Model & Metadata
@@ -327,6 +325,7 @@ def train_and_optimize_lightgbm(
 
     meta = {
         "best_threshold": float(best_threshold),
+        "best_margin": float(best_margin),
         "validation_macro_f05": float(best_f05),
         "validation_auc": float(val_auc),
         "feature_names": FEATURE_NAMES,

@@ -46,7 +46,8 @@ def generate_submission(
         meta = json.load(f)
 
     best_threshold = meta['best_threshold']
-    print(f"  • Optimal Decision Threshold: {best_threshold:.2f}")
+    best_margin = meta.get('best_margin', 1.0)
+    print(f"  • Optimal Decision Threshold: {best_threshold:.2f} (Margin: {best_margin:.2f})")
     print(f"  • Trained Validation F0.5: {meta.get('validation_macro_f05', 0):.4f}")
 
     # 2. Load Test Records
@@ -164,8 +165,10 @@ def generate_submission(
             if matches:
                 # Sort by confidence descending
                 matches.sort(key=lambda x: x[1], reverse=True)
-                predictions[s1_id] = [m[0] for m in matches]
-                total_matches_predicted += len(matches)
+                top_p = matches[0][1]
+                filtered = [m[0] for m in matches if (top_p - m[1]) <= best_margin]
+                predictions[s1_id] = filtered
+                total_matches_predicted += len(filtered)
             else:
                 predictions[s1_id] = []
                 singletons_predicted += 1

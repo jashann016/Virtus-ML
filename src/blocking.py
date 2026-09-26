@@ -84,11 +84,25 @@ def extract_address_keys(address_norm: str, raw_address: str = "") -> List[str]:
             for w in sig_words[:3]:
                 keys.append(f"{num}_{w}")
                 
-    # 4. Location tokens (length >= 4)
+    # 4. Number combined with municipal city/state tokens (last 2 words)
+    city_tokens = [w for w in sig_words[-2:] if len(w) >= 3]
+    if numbers and city_tokens:
+        for num in numbers[:3]:
+            for c in city_tokens:
+                keys.append(f"nc_{num}_{c}")
+
+    # 5. Street word combined with city token
+    if len(sig_words) >= 2 and city_tokens:
+        for sw in sig_words[:3]:
+            for cw in city_tokens:
+                if sw != cw:
+                    keys.append(f"sc_{sw}_{cw}")
+
+    # 6. Location tokens (length >= 4)
     for w in sig_words:
         keys.append(f"loc_{w}")
                 
-    # 5. Distinctive street & locality word-pairs
+    # 7. Distinctive street & locality word-pairs
     if len(sig_words) >= 2:
         for i in range(min(5, len(sig_words) - 1)):
             pair = "_".join(sorted([sig_words[i], sig_words[i + 1]]))
@@ -178,6 +192,16 @@ class InvertedIndexBlocker:
                 if len(w) >= 4:
                     for tri in get_char_trigrams(w):
                         self.trigram_index[country][tri].append(c_id)
+                        
+            # Domain stem indexing: e.g. 'catelecom.com' -> 'catelecom', 'telecom'
+            dom_match = re.search(r'\b([a-zA-Z0-9-]+)\.(?:com|in|org|net|co|io)\b', raw_name.lower())
+            if dom_match:
+                dom_stem = dom_match.group(1).replace('-', '')
+                self.name_token_index[country][dom_stem].append(c_id)
+                # If domain stem ends with a common industry word (e.g. telecom, retail, tech)
+                for ind_word in ['telecom', 'tech', 'retail', 'corp', 'group', 'media', 'global', 'systems', 'consulting']:
+                    if ind_word in dom_stem and len(dom_stem) > len(ind_word):
+                        self.name_token_index[country][ind_word].append(c_id)
             
             # 3. Token-sorted name key
             if len(name_words) >= 2:
@@ -239,6 +263,8 @@ class InvertedIndexBlocker:
         for k in addr_keys:
             if k.startswith('cnum_') or k.startswith('plot_') or k.startswith('pair_'):
                 weight = 15
+            elif k.startswith('nc_') or k.startswith('sc_'):
+                weight = 12
             elif is_cross_script:
                 weight = 8
             else:
