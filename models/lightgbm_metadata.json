@@ -1,0 +1,33 @@
+{
+  "best_threshold": 0.7600000000000001,
+  "best_margin": 0.18,
+  "validation_macro_f05": 0.9756989924498498,
+  "validation_auc": 0.9996684810582629,
+  "feature_names": [
+    "name_token_sort_ratio",
+    "name_token_set_ratio",
+    "name_jaro_winkler",
+    "name_ratio",
+    "name_exact_clean",
+    "name_first_word_match",
+    "name_len_diff_ratio",
+    "name_containment_ratio",
+    "addr_token_set_ratio",
+    "addr_token_sort_ratio",
+    "addr_jaccard",
+    "number_match",
+    "number_conflict",
+    "exact_first_word_and_number",
+    "plot_code_match",
+    "plot_code_conflict",
+    "domain_match",
+    "country_match",
+    "non_latin_flag",
+    "reciprocal_rank",
+    "has_matching_street_token"
+  ],
+  "n_features": 21,
+  "train_samples": 1084078,
+  "val_samples": 271017,
+  "timestamp": "2026-09-26 12:28:27"
+}
