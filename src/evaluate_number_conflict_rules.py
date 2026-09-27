@@ -1,5 +1,5 @@
 import pandas as pd
-from src.metrics import compute_macro_f05
+from metrics import compute_macro_f05
 
 FEATURES = "output/independent_features.parquet"
 SCORED = "output/independent_scored_candidates.parquet"
