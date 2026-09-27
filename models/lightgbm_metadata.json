@@ -1,6 +1,6 @@
 {
-  "best_threshold": 0.7600000000000001,
-  "best_margin": 0.18,
+  "best_threshold": 0.85,
+  "best_margin": 0.04,
   "validation_macro_f05": 0.9756989924498498,
   "validation_auc": 0.9996684810582629,
   "feature_names": [

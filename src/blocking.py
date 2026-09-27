@@ -167,8 +167,9 @@ class InvertedIndexBlocker:
         self.soundex_index: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
         self.address_key_index: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
         
-    def index_candidates(self, candidates: List[dict]):
-        """Indexes candidate records from Source 2 and Source 3."""
+    def index_candidates(self, candidates):
+        """Indexes candidate records from Source 2 and Source 3 with memory-safe posting caps."""
+        POSTING_CAP = 250
         for cand in candidates:
             c_id = cand['entity_id']
             country = cand['country']
@@ -180,43 +181,55 @@ class InvertedIndexBlocker:
             
             # 1. Exact full normalized name
             if norm_name:
-                self.exact_name_index[country][norm_name].append(c_id)
+                lst = self.exact_name_index[country][norm_name]
+                if len(lst) < POSTING_CAP:
+                    lst.append(c_id)
             
             # 2. Name tokens & first-word brand index
             name_words = [w for w in norm_name.split() if len(w) >= 2 and w not in STOP_WORDS]
             if name_words:
                 first_w = name_words[0]
                 if first_w not in COMMON_CITY_TOKENS and len(first_w) >= 3:
-                    self.first_word_index[country][first_w].append(c_id)
+                    lst = self.first_word_index[country][first_w]
+                    if len(lst) < POSTING_CAP:
+                        lst.append(c_id)
                     sdx = soundex(first_w)
                     if sdx:
-                        self.soundex_index[country][sdx].append(c_id)
+                        lst_sdx = self.soundex_index[country][sdx]
+                        if len(lst_sdx) < POSTING_CAP:
+                            lst_sdx.append(c_id)
                     
             for w in name_words:
-                self.name_token_index[country][w].append(c_id)
-                if len(w) >= 4:
-                    for tri in get_char_trigrams(w):
-                        self.trigram_index[country][tri].append(c_id)
+                lst = self.name_token_index[country][w]
+                if len(lst) < POSTING_CAP:
+                    lst.append(c_id)
                         
             # Domain stem indexing: e.g. 'catelecom.com' -> 'catelecom', 'telecom'
             dom_match = re.search(r'\b([a-zA-Z0-9-]+)\.(?:com|in|org|net|co|io)\b', raw_name.lower())
             if dom_match:
                 dom_stem = dom_match.group(1).replace('-', '')
-                self.name_token_index[country][dom_stem].append(c_id)
-                # If domain stem ends with a common industry word (e.g. telecom, retail, tech)
+                lst = self.name_token_index[country][dom_stem]
+                if len(lst) < POSTING_CAP:
+                    lst.append(c_id)
                 for ind_word in ['telecom', 'tech', 'retail', 'corp', 'group', 'media', 'global', 'systems', 'consulting']:
                     if ind_word in dom_stem and len(dom_stem) > len(ind_word):
-                        self.name_token_index[country][ind_word].append(c_id)
+                        lst_ind = self.name_token_index[country][ind_word]
+                        if len(lst_ind) < POSTING_CAP:
+                            lst_ind.append(c_id)
             
             # 3. Token-sorted name key
             if len(name_words) >= 2:
                 sorted_key = "_".join(sorted(name_words[:4]))
-                self.sorted_name_index[country][sorted_key].append(c_id)
+                lst = self.sorted_name_index[country][sorted_key]
+                if len(lst) < POSTING_CAP:
+                    lst.append(c_id)
                     
             # 4. Address keys (numbers, compound numbers, plot codes, locations)
             addr_keys = extract_address_keys(norm_addr, raw_address=raw_addr)
             for k in addr_keys:
-                self.address_key_index[country][k].append(c_id)
+                lst = self.address_key_index[country][k]
+                if len(lst) < POSTING_CAP:
+                    lst.append(c_id)
 
     def retrieve_candidates(
         self, 
