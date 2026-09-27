@@ -13,6 +13,8 @@ models/*.pkl
 !models/lightgbm_matcher.pkl
 models/*.safetensors
 aws/checkpoints/
+aws/data/*.jsonl
+!aws/data/train_pairs_sample.jsonl
 
 # Local datasets
 train_ground_truth.tsv
